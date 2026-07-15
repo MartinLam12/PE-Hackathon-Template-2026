@@ -1,10 +1,10 @@
-from peewee import BooleanField, DateTimeField, IntegerField, TextField
+from peewee import AutoField, BooleanField, DateTimeField, IntegerField, TextField
 
 from app.database import BaseModel
 
 
 class ShortURL(BaseModel):
-    id = IntegerField(primary_key=True)
+    id = AutoField()
     user_id = IntegerField(null=True)
     short_code = TextField(unique=True)
     original_url = TextField()

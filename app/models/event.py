@@ -1,10 +1,10 @@
-from peewee import DateTimeField, IntegerField, TextField
+from peewee import AutoField, DateTimeField, IntegerField, TextField
 
 from app.database import BaseModel
 
 
 class Event(BaseModel):
-    id = IntegerField(primary_key=True)
+    id = AutoField()
     url_id = IntegerField(null=True)
     user_id = IntegerField(null=True)
     event_type = TextField()
