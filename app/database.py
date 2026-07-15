@@ -1,6 +1,8 @@
 import os
 
-from peewee import DatabaseProxy, Model, PostgresqlDatabase
+from flask import request
+from peewee import DatabaseProxy, Model, OperationalError, PostgresqlDatabase
+from werkzeug.exceptions import ServiceUnavailable
 
 db = DatabaseProxy()
 
@@ -22,7 +24,13 @@ def init_db(app):
 
     @app.before_request
     def _db_connect():
-        db.connect(reuse_if_open=True)
+        if request.endpoint == "health":
+            return
+
+        try:
+            db.connect(reuse_if_open=True)
+        except OperationalError as exc:
+            raise ServiceUnavailable(description="Database unavailable") from exc
 
     @app.teardown_appcontext
     def _db_close(exc):

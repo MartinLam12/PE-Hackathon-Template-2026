@@ -48,10 +48,13 @@ createdb hackathon_db
 # 4. Configure environment
 cp .env.example .env   # edit if your DB credentials differ
 
-# 5. Run the server
+# 5. Seed the database
+uv run seed.py
+
+# 6. Run the server
 uv run run.py
 
-# 6. Verify
+# 7. Verify
 curl http://localhost:5000/health
 # → {"status":"ok"}
 ```
@@ -63,8 +66,7 @@ mlh-pe-hackathon/
 ├── app/
 │   ├── __init__.py          # App factory (create_app)
 │   ├── database.py          # DatabaseProxy, BaseModel, connection hooks
-│   ├── models/
-│   │   └── __init__.py      # Import your models here
+│   ├── models/              # User, URL, and event models
 │   └── routes/
 │       └── __init__.py      # register_routes() — add blueprints here
 ├── .env.example             # DB connection template
@@ -74,6 +76,17 @@ mlh-pe-hackathon/
 ├── run.py                   # Entry point: uv run run.py
 └── README.md
 ```
+
+## URL endpoints
+
+```text
+POST /urls              Create a short URL
+GET  /urls              List URLs (optional ?user_id=...)
+GET  /urls/<short_code> Get URL details
+GET  /<short_code>      Redirect to the original URL
+```
+
+The seed loader reads `seed_data/` by default. Set `SEED_DIR` to use another directory.
 
 ## How to Add a Model
 
