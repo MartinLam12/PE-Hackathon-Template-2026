@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 from flask import Flask, jsonify
-from peewee import DatabaseError, OperationalError
+from peewee import OperationalError
 from werkzeug.exceptions import BadRequest, InternalServerError, NotFound, ServiceUnavailable
 
 from app.database import init_db
@@ -33,10 +33,6 @@ def create_app():
     @app.errorhandler(ServiceUnavailable)
     def handle_service_unavailable(error):
         return jsonify(error="service_unavailable", message=error.description), 503
-
-    @app.errorhandler(DatabaseError)
-    def handle_database_error(error):
-        return jsonify(error="service_unavailable", message="Database unavailable"), 503
 
     @app.errorhandler(OperationalError)
     def handle_operational_error(error):

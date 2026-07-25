@@ -61,6 +61,7 @@ def test_database_unavailable_returns_503(client):
 
 
 def test_health_ok_without_database(client):
-    response = client.get("/health")
+    with patch.object(db.obj, "connect", side_effect=OperationalError("connection refused")):
+        response = client.get("/health")
     assert response.status_code == 200
     assert response.get_json() == {"status": "ok"}
