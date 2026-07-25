@@ -7,6 +7,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v6
@@ -16,4 +17,4 @@ jobs:
         with:
           python-version-file: .python-version
       - run: uv sync --dev
-      - run: uv run pytest || test $? -eq 5
+      - run: uv run pytest --cov=app --cov-report=term-missing

@@ -197,6 +197,33 @@ query = (Product
          .group_by(Product.category))
 ```
 
+## Error handling
+
+All API errors return JSON with this shape:
+
+```json
+{ "error": "<code>", "message": "<human-readable detail>" }
+```
+
+| Status | When | Example |
+|--------|------|---------|
+| **400** | Invalid input | POST `/urls` without `original_url` |
+| **404** | Short code not found or inactive | GET `/urls/badcode`, GET `/badcode` |
+| **503** | Database unavailable or cannot allocate a unique code | DB down, repeated `short_code` collisions |
+| **500** | Unexpected server error | Unhandled exception |
+
+Handlers live in `app/__init__.py` (`BadRequest`, `NotFound`, `ServiceUnavailable`, `OperationalError`, `InternalServerError`). Routes call `abort(status, description=...)` so errors never crash into HTML stack traces.
+
+`/health` skips the database connection, so it returns `{"status":"ok"}` even when Postgres is down.
+
+See [docs/failure-modes.md](docs/failure-modes.md) for what can break, what users see, and how each case was tested.
+
+## CI
+
+GitHub Actions runs tests on every push and pull request (`.github/workflows/ci.yml`). A Postgres service is started so pytest can run against a real database.
+
+To block deployment when tests fail, enable branch protection on your deploy branch and require the **test** check to pass before merge.
+
 ## Tips
 
 - Use `model_to_dict` from `playhouse.shortcuts` to convert model instances to dictionaries for JSON responses.
