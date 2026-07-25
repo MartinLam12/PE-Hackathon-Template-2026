@@ -216,11 +216,11 @@ Handlers live in `app/__init__.py` (`BadRequest`, `NotFound`, `ServiceUnavailabl
 
 `/health` skips the database connection, so it returns `{"status":"ok"}` even when Postgres is down.
 
-See [docs/failure-modes.md](docs/failure-modes.md) for what can break, what users see, and how each case was tested.
+See [docs/failure-modes.md](docs/failure-modes.md) for what can break, what users see, and how each case was tested. See [docs/architecture.md](docs/architecture.md) for system diagrams.
 
 ## CI
 
-GitHub Actions runs tests on every push and pull request (`.github/workflows/ci.yml`). A Postgres service is started so pytest can run against a real database.
+GitHub Actions runs tests on every push and pull request (`.github/workflows/ci.yml`). Tests use an in-memory SQLite database via `tests/conftest.py`, so no live Postgres is required in CI.
 
 To block deployment when tests fail, enable branch protection on your deploy branch and require the **test** check to pass before merge.
 
