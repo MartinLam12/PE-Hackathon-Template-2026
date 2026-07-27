@@ -218,6 +218,10 @@ Handlers live in `app/__init__.py` (`BadRequest`, `NotFound`, `ServiceUnavailabl
 
 See [docs/failure-modes.md](docs/failure-modes.md) for what can break, what users see, and how each case was tested. See [docs/architecture.md](docs/architecture.md) for system diagrams.
 
+## Scaling and load testing
+
+`docker compose up` runs two app instances (`app1`, `app2`) behind an Nginx reverse proxy/load balancer (`nginx.conf`) on port 8080, sharing one Postgres instance. See [docs/load-testing.md](docs/load-testing.md) for the Locust load test setup and results (50 concurrent users on a single instance, 200 concurrent users through the load balancer).
+
 ## CI
 
 GitHub Actions runs tests on every push and pull request (`.github/workflows/ci.yml`). Tests use an in-memory SQLite database via `tests/conftest.py`, so no live Postgres is required in CI.
