@@ -35,7 +35,7 @@ def create_app():
         return jsonify(error="service_unavailable", message=error.description), 503
 
     @app.errorhandler(OperationalError)
-    def handle_database_error(error):
+    def handle_operational_error(error):
         return jsonify(error="service_unavailable", message="Database unavailable"), 503
 
     @app.errorhandler(InternalServerError)
