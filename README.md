@@ -64,27 +64,44 @@ curl http://localhost:5000/health
 ```
 mlh-pe-hackathon/
 ├── app/
-│   ├── __init__.py          # App factory (create_app)
-│   ├── database.py          # DatabaseProxy, BaseModel, connection hooks
+│   ├── __init__.py          # App factory (create_app) + error handlers
+│   ├── cache.py             # Cache backend selection (Redis / in-process)
+│   ├── database.py          # Pooled Postgres connection, per-request hooks
 │   ├── models/              # User, URL, and event models
 │   └── routes/
-│       └── __init__.py      # register_routes() — add blueprints here
-├── .env.example             # DB connection template
-├── .gitignore               # Python + uv gitignore
-├── .python-version          # Pin Python version for uv
+│       ├── __init__.py      # register_routes() — add blueprints here
+│       └── urls.py          # URL CRUD, redirect, pagination
+├── tests/
+│   ├── unit/                # One layer in isolation
+│   └── integration/         # Full request → route → DB → response
+├── loadtest/
+│   ├── locustfile.py        # Three load profiles + pass/fail thresholds
+│   └── results/             # Committed CSV/HTML evidence per tier
+├── chaos/
+│   ├── chaos_test.sh        # Four fault-injection scenarios
+│   └── results/             # Committed run transcript
+├── docs/                    # Architecture, performance, failure modes
+├── docker-compose.yml       # 2 app instances + Nginx + Postgres + Redis
+├── nginx.conf               # Load balancing and failover
+├── Dockerfile               # App image
+├── .dockerignore            # Keeps .env and local state out of the image
+├── .env.example             # Configuration template
 ├── pyproject.toml           # Project metadata + dependencies
 ├── run.py                   # Entry point: uv run run.py
-└── README.md
+└── seed.py                  # Load seed_data/ CSVs into Postgres
 ```
 
 ## URL endpoints
 
-```text
-POST /urls              Create a short URL
-GET  /urls              List URLs (optional ?user_id=...)
-GET  /urls/<short_code> Get URL details
-GET  /<short_code>      Redirect to the original URL
-```
+| Method | Path | Notes |
+|---|---|---|
+| `POST` | `/urls` | Create a short URL. Body: `{"original_url": "...", "title": "...", "user_id": 1}` — only `original_url` is required. Returns `201`. |
+| `GET` | `/urls` | List URLs. Paginated: `?limit=` (default 50, max 200), `?offset=` (default 0). Optional `?user_id=`. |
+| `GET` | `/urls/<short_code>` | URL details, or `404`. |
+| `GET` | `/<short_code>` | `302` redirect to the original URL, or `404` if unknown or inactive. |
+| `GET` | `/health` | `{"status":"ok"}`. Never touches the database, so it stays `200` during a database outage. |
+
+`GET /urls` is capped at 200 rows per request — it used to return the whole table, which was the throughput bottleneck fixed for Gold. A `limit` above the ceiling is clamped rather than rejected; a non-integer or out-of-range `limit`/`offset` returns `400`.
 
 The seed loader reads `seed_data/` by default. Set `SEED_DIR` to use another directory.
 
@@ -216,17 +233,95 @@ Handlers live in `app/__init__.py` (`BadRequest`, `NotFound`, `ServiceUnavailabl
 
 `/health` skips the database connection, so it returns `{"status":"ok"}` even when Postgres is down.
 
-See [docs/failure-modes.md](docs/failure-modes.md) for what can break, what users see, and how each case was tested. See [docs/architecture.md](docs/architecture.md) for system diagrams.
+A `503` can also mean the pooled database connection we were handed was dead (for example, Postgres restarted underneath us). The error handler evicts idle pooled connections when that happens, so the next request reconnects instead of drawing another dead handle.
+
+See [docs/failure-modes.md](docs/failure-modes.md) for what can break, what users see, and how each case was tested. See [docs/architecture.md](docs/architecture.md) for system diagrams, and [docs/performance.md](docs/performance.md) for the bottleneck analysis.
 
 ## Scaling and load testing
 
-`docker compose up` runs two app instances (`app1`, `app2`) behind an Nginx reverse proxy/load balancer (`nginx.conf`) on port 8080, sharing one Postgres instance. See [docs/load-testing.md](docs/load-testing.md) for the Locust load test setup and results (50 concurrent users on a single instance, 200 concurrent users through the load balancer).
+`docker compose up` runs two app instances (`app1`, `app2`) behind an Nginx reverse proxy/load balancer (`nginx.conf`) on port 8080, sharing one Postgres instance and one Redis cache.
+
+```
+client -> nginx :8080 -> app1 :5000 -+
+                      -> app2 :5000 -+-> postgres  +  redis
+```
+
+Measured with Locust ([loadtest/](loadtest/), raw results in [loadtest/results/](loadtest/results/)):
+
+| | Users | Topology | Throughput | p95 | Errors |
+|---|---|---|---|---|---|
+| Bronze | 50 | 1 instance | 101 req/s | 14 ms | 0% |
+| Silver | 200 | 2 instances + LB | 371 req/s | 110 ms | 0% |
+| **Gold** | **500** | **2 instances + LB + Redis** | **960 req/s** | **15 ms** | **0%** |
+
+With think time removed the stack sustained **3,132 req/s with zero failures**. At that point the app containers were at ~347% CPU while Postgres sat under 10% — the ceiling is application CPU, not the database.
+
+Two changes did the work:
+
+- **Pagination on `GET /urls`.** It previously returned every row in the table on every request. A default response went from ~422 KB to 10.7 KB — 40x smaller, and the largest single win.
+- **Redis caching** on the redirect and detail routes, shared by both instances so a value cached by one is a hit on the other. **99.8% hit rate**, worth ~20% throughput and 24% off p95 — measured against the same build with `CACHE_DISABLED=1`.
+
+Full analysis, including the two bugs the testing uncovered, is in [docs/performance.md](docs/performance.md).
+
+## Caching
+
+| Path | Cached | TTL |
+|---|---|---|
+| `GET /<short_code>` | the 302 response | 300 s |
+| `GET /urls/<short_code>` | the JSON response | 60 s |
+| `GET /urls` | not cached — always fresh | — |
+
+Routes use Flask-Caching's `@cache.cached` decorator. Set `REDIS_URL` to use Redis; leave it unset and the app falls back to an in-process cache, which is what the test suite runs on. Set `CACHE_DISABLED=1` to bypass caching entirely.
+
+The cache is an optimisation, never a source of truth: if Redis is unreachable, reads fall through to Postgres and the service stays correct, just slower. Tested in `tests/integration/test_caching.py` and verified by chaos Scenario D.
+
+Hit rate comes from Redis itself:
+
+```bash
+docker compose exec redis redis-cli INFO stats | grep keyspace
+```
+
+## Chaos testing
+
+[chaos/chaos_test.sh](chaos/chaos_test.sh) injects four faults against the running stack and records what happened. Committed transcript: [chaos/results/chaos-run.log](chaos/results/chaos-run.log).
+
+| Scenario | Fault | Result |
+|---|---|---|
+| A | Kill the gunicorn master in `app1` | Docker restarted it (~5s); **41/41 requests through the LB succeeded** |
+| B | Stop Postgres | `503` JSON on DB routes, `/health` stayed `200`, no crash, recovered in ~2s |
+| C | Kill a gunicorn worker | Master respawned it; **39/39 requests succeeded** |
+| D | Stop Redis | Redirect, list, detail and create all still served; **18/18 requests succeeded** |
+
+See [docs/failure-modes.md](docs/failure-modes.md) for the full failure catalogue.
+
+## Tests
+
+```bash
+uv run pytest --cov=app --cov-report=term-missing
+```
+
+The suite is split by scope:
+
+| Directory | Scope | What it covers |
+|---|---|---|
+| `tests/unit/` | One layer in isolation | `ShortURL` model defaults and constraints (no HTTP); `/health` payload (no DB) |
+| `tests/integration/` | Full request → route → DB → response | URL create/list/get/redirect round-trips; every documented error path (400/404/503) end-to-end |
+
+Both suites share `tests/conftest.py`, which swaps Postgres for a throwaway SQLite file so no live database is needed.
+
+Current coverage: **96%** (roadmap targets are 50% for Silver, 70% for Gold). Remaining uncovered lines are catalogued in [docs/coverage-gaps-for-person-1.md](docs/coverage-gaps-for-person-1.md).
 
 ## CI
 
-GitHub Actions runs tests on every push and pull request (`.github/workflows/ci.yml`). Tests use an in-memory SQLite database via `tests/conftest.py`, so no live Postgres is required in CI.
+GitHub Actions runs tests on every push and pull request (`.github/workflows/ci.yml`). Tests use an SQLite database via `tests/conftest.py`, so no live Postgres is required in CI.
 
-To block deployment when tests fail, enable branch protection on your deploy branch and require the **test** check to pass before merge.
+**Failing tests block deployment.** Branch protection is enabled on `main` with the **test** check required and "strict" (branches must be up to date) turned on, so a red CI run cannot be merged into the branch that deploys.
+
+```bash
+# Verify the gate is live:
+gh api repos/<owner>/<repo>/branches/main/protection --jq '.required_status_checks'
+# → {"strict": true, "contexts": ["test"], ...}
+```
 
 ## Tips
 
