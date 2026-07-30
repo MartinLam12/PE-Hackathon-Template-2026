@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hackathon_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app1:
+    build: .
+    ports:
+      - "5001:5000"
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_NAME: hackathon_db
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app2:
+    build: .
+    environment:
+      DATABASE_HOST: postgres
+      DATABASE_NAME: hackathon_db
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app1
+      - app2

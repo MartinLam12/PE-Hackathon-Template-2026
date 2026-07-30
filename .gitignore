@@ -34,3 +34,6 @@ Thumbs.db
 
 # Judging (not visible to participants)
 judging/
+
+# Load test output (regenerate via docs/load-testing.md)
+loadtest/results/
