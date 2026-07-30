@@ -2,9 +2,13 @@
 
 Provides a Flask app and test client backed by a throwaway SQLite
 database instead of Postgres, so the suite runs without a live
-database connection. `PostgresqlDatabase` is monkeypatched to return a
-SQLite instance for the duration of each test; tables are created
-before and dropped after.
+database connection. `PooledPostgresqlDatabase` is monkeypatched to
+return a SQLite instance for the duration of each test; tables are
+created before and dropped after.
+
+The cache falls back to an in-process `SimpleCache` whenever `REDIS_URL`
+is unset, so tests exercise the real caching code paths without needing
+a Redis server.
 """
 
 import pytest
@@ -26,10 +30,18 @@ def app(tmp_path, monkeypatch):
     and an in-memory SQLite DB would lose its data between connections.
     """
     test_db = SqliteDatabase(str(tmp_path / "test.db"))
-    monkeypatch.setattr("app.database.PostgresqlDatabase", lambda *a, **k: test_db)
+    monkeypatch.setattr("app.database.PooledPostgresqlDatabase", lambda *a, **k: test_db)
+    # Force the SimpleCache backend even if the developer running the suite
+    # has REDIS_URL exported for local Docker work.
+    monkeypatch.delenv("REDIS_URL", raising=False)
 
     application = create_app()
-    application.config.update(TESTING=True)
+    # DEBUG=False so the suite mirrors how the app actually runs under
+    # gunicorn, rather than inheriting FLASK_DEBUG from a developer's local
+    # .env. It matters: Flask-Caching re-raises backend errors in debug mode
+    # and falls back to the database outside it, and the fallback is the
+    # behaviour we depend on.
+    application.config.update(TESTING=True, DEBUG=False)
 
     db.create_tables(MODELS)
     yield application

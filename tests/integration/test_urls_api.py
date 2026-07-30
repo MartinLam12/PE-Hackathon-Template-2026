@@ -1,3 +1,10 @@
+"""Integration tests for the URL API.
+
+Each test drives a full request/response cycle — HTTP request through
+Flask routing, into the route handler, out to the database via Peewee,
+and back as JSON — rather than exercising a single layer in isolation.
+"""
+
 from datetime import datetime, timezone
 
 from app.models.url import ShortURL
