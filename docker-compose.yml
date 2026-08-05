@@ -1,42 +1,74 @@
+x-app: &app
+  build: .
+  restart: unless-stopped
+  environment:
+    DATABASE_HOST: postgres
+    DATABASE_NAME: hackathon_db
+    DATABASE_USER: postgres
+    DATABASE_PASSWORD: postgres
+    # Both instances share one Redis so a value cached by app1 is a hit on
+    # app2. A per-instance in-memory cache would halve the hit rate.
+    REDIS_URL: redis://redis:6379/0
+    # Set CACHE_DISABLED=1 in your shell and recreate app1/app2 to measure the
+    # same build with caching turned off (the A/B in docs/performance.md).
+    CACHE_DISABLED: ${CACHE_DISABLED:-}
+    # Safe here: Nginx is the only thing in front of these containers.
+    TRUST_PROXY_HEADERS: 1
+    GUNICORN_WORKERS: 4
+    GUNICORN_THREADS: 8
+    DB_MAX_CONNECTIONS: 8
+  healthcheck:
+    test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health')\""]
+    interval: 5s
+    timeout: 3s
+    retries: 3
+    start_period: 10s
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: hackathon_db
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
+    # 2 instances x 4 workers x 8 pooled connections = 64 worst case, plus
+    # headroom for seeding and psql sessions.
+    command: ["postgres", "-c", "max_connections=150"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Cache-only workload: cap memory and evict the least recently used key
+    # rather than letting Redis grow without bound or start refusing writes.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   app1:
-    build: .
+    <<: *app
     ports:
       - "5001:5000"
-    environment:
-      DATABASE_HOST: postgres
-      DATABASE_NAME: hackathon_db
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   app2:
-    build: .
-    environment:
-      DATABASE_HOST: postgres
-      DATABASE_NAME: hackathon_db
-      DATABASE_USER: postgres
-      DATABASE_PASSWORD: postgres
-    depends_on:
-      postgres:
-        condition: service_healthy
+    <<: *app
 
   nginx:
     image: nginx:1.27-alpine
+    restart: unless-stopped
     ports:
       - "8080:80"
     volumes:

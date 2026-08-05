@@ -1,0 +1,28 @@
+# Without this file, `COPY . .` bakes the developer's local .env into the
+# image. That is how FLASK_DEBUG=true ended up switched on in every
+# "production" container — and any real credentials in .env would be sitting
+# in an image layer for anyone who can pull it.
+.env
+
+# Version control and local tooling
+.git
+.github
+.gitignore
+.venv
+.vscode
+.idea
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache
+.coverage
+htmlcov
+
+# Benchmark and chaos output — evidence for the repo, dead weight in the image
+loadtest/results
+chaos/results
+
+# Docs are not needed to serve traffic
+docs
+*.md

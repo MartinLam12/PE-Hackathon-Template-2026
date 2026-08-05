@@ -1,48 +1,60 @@
-# Coverage gaps for Person 1
+# Test coverage: current state and remaining gaps
 
-Generated from `uv run pytest --cov=app --cov-report=term-missing` (96% overall).
+Generated from `uv run pytest --cov=app --cov-report=term-missing`.
 
-## Coverage map
+**34 tests, 97% coverage** (roadmap targets: 50% for Silver, 70% for Gold).
+
+| Module | Coverage | Uncovered |
+|---|---|---|
+| `app/database.py` | 100% | — |
+| `app/models/*` | 100% | — |
+| `app/routes/__init__.py` | 100% | — |
+| `app/__init__.py` | 98% | the `ProxyFix` branch |
+| `app/routes/urls.py` | 95% | short-code collision retry loop |
+| `app/cache.py` | 85% | two config branches (13 statements total) |
+
+## Suite layout
+
+| Directory | Scope |
+|---|---|
+| `tests/unit/` | One layer in isolation: model constraints and `/health` |
+| `tests/integration/` | Full request → route → DB → response: URL CRUD, pagination, caching behaviour, every documented error path |
 
 ```mermaid
 flowchart TB
-    subgraph covered [Covered ~96%]
-        Routes["app/routes/urls.py — list, create, get, redirect"]
-        DbConnect["app/database.py — connect + before_request"]
-        Handlers400["400 / 404 / 503 from routes"]
-        Health["GET /health — skips DB even when connect fails"]
-        OpError["OperationalError / ServiceUnavailable → 503"]
+    subgraph covered ["Covered — 97%"]
+        R["routes: list / create / get / redirect"]
+        P["pagination: defaults, clamping, offset, 400s"]
+        C["caching: read-through, no-cache-on-404, cache outage"]
+        D["database: pooled connect, teardown, stale-connection eviction"]
+        E["errors: 400 / 404 / 500 / 503 end to end"]
     end
 
-    subgraph gaps [Needs tests — Person 1]
-        G1["app/__init__.py — 500 catch-all handler"]
-        G2["app/database.py — _db_close teardown"]
-        G3["app/routes/urls.py — collision retry loop"]
+    subgraph gaps ["Remaining gaps"]
+        G1["urls.py — collision retry loop"]
+        G2["cache.py — NullCache / RedisCache config branches"]
+        G3["__init__.py — ProxyFix branch"]
     end
-
-    covered --> gaps
 ```
 
-## Untested paths
+## Remaining gaps, and why they are acceptable
 
-Please add tests for the following:
+- **`app/routes/urls.py` — the `IntegrityError` collision retry loop.**
+  A duplicate `short_code` retries up to 5 times, then returns 503. Reaching
+  it means forcing a collision, e.g. patching `_new_code` to return a
+  constant. Worth adding: the path is real, if astronomically unlikely at
+  62^6 possible codes.
 
-- **`app/__init__.py` — `handle_internal_server_error` (line 42)** — Catch-all 500 handler. Matters because unexpected exceptions must return JSON `{ "error": "internal_server_error" }`, not an HTML stack trace.
+- **`app/cache.py` — the `NullCache` and `RedisCache` config branches.**
+  The suite deliberately runs on `SimpleCache` so it needs no Redis server,
+  so only the `else` branch executes. Both other branches are exercised for
+  real by the Docker stack.
 
-- **`app/database.py` — `_db_close` (line 38)** — Teardown closes the DB connection after each request. Matters for connection leaks under load or after errors.
+- **`app/__init__.py` — the `ProxyFix` branch.** Only taken when
+  `TRUST_PROXY_HEADERS` is set, which the Docker stack does and the test
+  suite does not.
 
-- **`app/routes/urls.py` — `create_url` retry loop (lines 59–62)** — `IntegrityError` on duplicate `short_code` retries up to 5 times, then returns **503**. Matters because collision handling is a real failure mode under traffic.
-
-## Suggested test approach
-
-```mermaid
-flowchart LR
-    G1["500 handler"] --> T1["Raise RuntimeError in test route → expect 500 JSON"]
-    G2["_db_close"] --> T2["Assert db.is_closed after request teardown"]
-    G3["Collision loop"] --> T3["Mock _new_code to return duplicate → expect 503"]
-```
-
-Run coverage after adding tests:
+## Re-running
 
 ```bash
 uv run pytest --cov=app --cov-report=term-missing

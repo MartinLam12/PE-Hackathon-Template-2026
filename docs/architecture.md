@@ -4,32 +4,64 @@ High-level view of how requests move through the app and where errors are handle
 
 ## System diagram
 
+## Deployed topology
+
+What `docker compose up` actually runs. Only Nginx is reachable from outside.
+
 ```mermaid
 flowchart TB
-    Client[Browser / API client] --> Gunicorn[Gunicorn WSGI]
-    Gunicorn --> Flask[Flask create_app]
-    Flask --> BeforeReq[before_request: db.connect]
+    Client[Browser / API client] --> Nginx["Nginx :8080<br/>reverse proxy + load balancer"]
+    Nginx -->|round robin| App1["app1 — gunicorn<br/>4 workers x 8 threads"]
+    Nginx -->|round robin| App2["app2 — gunicorn<br/>4 workers x 8 threads"]
+    App1 --> Redis[("Redis<br/>shared cache")]
+    App2 --> Redis
+    App1 --> Postgres[("PostgreSQL<br/>pooled connections")]
+    App2 --> Postgres
+```
+
+Both app instances share one Redis, so a value cached by `app1` is a hit on
+`app2`. Nginx ejects an instance from the pool after 2 failed attempts and
+retries idempotent requests against the survivor.
+
+## Request flow within an instance
+
+```mermaid
+flowchart TB
+    Gunicorn[Gunicorn WSGI] --> Flask[Flask create_app]
+    Flask --> BeforeReq["before_request: db.connect (pooled)"]
+    BeforeReq -->|"skipped for /health"| Routes
     Flask --> Routes[Blueprints / routes]
-    Routes --> Urls["/urls, /urls/code, /code redirect"]
-    Routes --> Health["/health — no DB"]
-    BeforeReq --> Postgres[(PostgreSQL)]
-    Urls --> Postgres
+    Routes --> CacheCheck{"cached?"}
+    CacheCheck -->|hit| Served["serve from Redis"]
+    CacheCheck -->|miss| Postgres[(PostgreSQL)]
+    Postgres --> Fill["populate cache"]
+    Routes --> Health["/health — no DB, no cache"]
     Flask --> ErrorHandlers["Error handlers in app/__init__.py"]
     ErrorHandlers --> JsonResponse["JSON 400 / 404 / 503 / 500"]
-    Flask --> Teardown[teardown_appcontext: db.close]
+    Flask --> Teardown["teardown_appcontext: return connection to pool"]
 ```
+
+A cache outage is not an outage: `@cache.cached` falls back to calling the
+view when the backend raises, so every read path falls through to Postgres.
 
 ## Key files
 
 | File | Role |
 |------|------|
 | `run.py` | WSGI entry point (`gunicorn run:app`) |
-| `app/__init__.py` | App factory + global error handlers |
-| `app/database.py` | Postgres connection, per-request connect/close |
-| `app/routes/urls.py` | URL CRUD and redirect routes |
-| `tests/conftest.py` | SQLite test DB (no live Postgres needed) |
+| `app/__init__.py` | App factory + global error handlers + stale-connection eviction |
+| `app/database.py` | Pooled Postgres connections, per-request checkout/return |
+| `app/cache.py` | Cache backend selection (Redis / in-process / disabled) |
+| `app/routes/urls.py` | URL CRUD, redirect, pagination, cached routes |
+| `docker-compose.yml` | 2 app instances + Nginx + Postgres + Redis |
+| `nginx.conf` | Load balancing, upstream health, failover |
+| `chaos/chaos_test.sh` | Fault injection and recovery evidence |
+| `loadtest/locustfile.py` | Three load profiles (tier-comparable, realistic, saturation) |
+| `tests/conftest.py` | SQLite test DB + SimpleCache (no live Postgres or Redis needed) |
 
 ## Related docs
 
-- [failure-modes.md](failure-modes.md) — what breaks, status codes, chaos/CI diagrams
-- [coverage-gaps-for-person-1.md](coverage-gaps-for-person-1.md) — untested paths and suggested tests
+- [performance.md](performance.md) — bottleneck analysis, cache A/B, where the ceiling is
+- [load-testing.md](load-testing.md) — load test setup and per-tier results
+- [failure-modes.md](failure-modes.md) — what breaks, status codes, chaos results
+- [coverage-gaps-for-person-1.md](coverage-gaps-for-person-1.md) — coverage state and remaining gaps

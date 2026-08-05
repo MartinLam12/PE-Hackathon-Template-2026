@@ -1,0 +1,86 @@
+############################################################
+# Chaos test run: 2026-07-30 19:43:22Z
+# Host: Darwin 25.5.0 arm64
+############################################################
+
+=== 19:43:22Z  Baseline ===
+NAME                                    SERVICE    STATUS
+pe-hackathon-template-2026-app1-1       app1       Up 15 seconds (healthy)
+pe-hackathon-template-2026-app2-1       app2       Up 15 seconds (healthy)
+pe-hackathon-template-2026-nginx-1      nginx      Up About an hour
+pe-hackathon-template-2026-postgres-1   postgres   Up About a minute (healthy)
+pe-hackathon-template-2026-redis-1      redis      Up About a minute (healthy)
+  [19:43:23Z] GET http://localhost:8080/health  -> 200
+  [19:43:23Z] GET http://localhost:8080/urls    -> 200
+  [19:43:23Z] load balancer is distributing across both instances:
+      X-Upstream-Addr: 172.20.0.4:5000
+      X-Upstream-Addr: 172.20.0.4:5000
+      X-Upstream-Addr: 172.20.0.5:5000
+      X-Upstream-Addr: 172.20.0.4:5000
+
+=== 19:43:27Z  Scenario A: kill the app process inside app1 ===
+  [19:43:27Z] app1 before: running exit=0 restarts=0
+  [19:43:27Z] poller started against http://localhost:8080 (every 0.2s)
+  [19:43:29Z] killing PID 1 (the gunicorn master) inside app1 ...
+  [19:43:29Z] SIGQUIT sent to the gunicorn master
+  [19:43:31Z] app1 during outage: running exit=0 restarts=1
+  [19:43:31Z] service still answering through LB? GET /health -> 200
+  [19:43:31Z] service still answering through LB? GET /urls   -> 200
+  [19:43:31Z] waiting for restart policy to bring app1 back ...
+  [19:43:35Z] app1 healthy again after ~5s
+  [19:43:35Z] app1 after:  running exit=0 restarts=1
+  [19:43:35Z] restart policy: unless-stopped
+  [19:43:37Z] poller: 41 requests, 41 x 200, 0 non-200
+  [19:43:37Z] both upstreams back in rotation:
+      X-Upstream-Addr: 172.20.0.4:5000
+      X-Upstream-Addr: 172.20.0.5:5000
+      X-Upstream-Addr: 172.20.0.5:5000
+      X-Upstream-Addr: 172.20.0.4:5000
+
+=== 19:43:42Z  Scenario B: take the database away ===
+  [19:43:42Z] stopping postgres ...
+  [19:43:45Z] GET /urls   -> 503   (expect 503, not a crash)
+  [19:43:45Z] response body:
+      {"error":"service_unavailable","message":"Database unavailable"}
+
+  [19:43:45Z] GET /health -> 200   (expect 200: health skips the DB)
+  [19:43:45Z] app containers still alive (did NOT crash):
+      pe-hackathon-template-2026-app1-1    Up 15 seconds (healthy)
+      pe-hackathon-template-2026-app2-1    Up 37 seconds (healthy)
+  [19:43:45Z] restarting postgres ...
+  [19:43:46Z] GET /urls recovered to 200 after ~2s
+  [19:43:46Z] final: GET /urls -> 200
+
+=== 19:43:46Z  Scenario C: kill a gunicorn worker (master should respawn it) ===
+  [19:43:46Z] gunicorn processes in app1 before: 5  (1 master + workers)
+  [19:43:49Z] killing gunicorn worker PID 7 ...
+  [19:43:54Z] gunicorn processes in app1 after:  5  (master respawns the worker)
+  [19:43:54Z] container never exited: running exit=0 restarts=1
+  [19:43:56Z] poller: 39 requests, 39 x 200, 0 non-200
+
+=== 19:43:56Z  Scenario D: take Redis away (cache outage must not be an outage) ===
+  [19:43:56Z] using existing short code: demo01
+  [19:43:56Z] warming the cache: GET /demo01 -> 302
+  [19:43:56Z] stopping redis ...
+  [19:44:01Z] with Redis down:
+  [19:44:01Z]   GET /demo01 (redirect) -> 302   (expect 302 from Postgres)
+  [19:44:02Z]   GET /urls             -> 200   (expect 200 from Postgres)
+  [19:44:02Z]   GET /urls/demo01       -> 200   (expect 200 from Postgres)
+  [19:44:02Z]   POST /urls            -> 201   (expect 201, writes do not need the cache)
+  [19:44:04Z] poller: 18 requests, 18 x 200, 0 non-200
+  [19:44:04Z] restarting redis ...
+  [19:44:09Z] redis healthy again after ~6s
+  [19:44:09Z] after recovery: GET /demo01 -> 302
+  [19:44:10Z] cache serving again: keyspace_hits:0
+
+=== 19:44:10Z  Final state ===
+NAME                                    SERVICE    STATUS
+pe-hackathon-template-2026-app1-1       app1       Up 39 seconds (healthy)
+pe-hackathon-template-2026-app2-1       app2       Up About a minute (healthy)
+pe-hackathon-template-2026-nginx-1      nginx      Up About an hour
+pe-hackathon-template-2026-postgres-1   postgres   Up 24 seconds (healthy)
+pe-hackathon-template-2026-redis-1      redis      Up 5 seconds (healthy)
+
+############################################################
+# Chaos test complete: 2026-07-30 19:44:10Z
+############################################################

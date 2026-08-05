@@ -35,5 +35,6 @@ Thumbs.db
 # Judging (not visible to participants)
 judging/
 
-# Load test output (regenerate via docs/load-testing.md)
-loadtest/results/
+# Load test output IS committed on purpose — it is the evidence for the
+# Scalability roadmap. Only Locust's per-run temp files are ignored.
+loadtest/results/*.tmp
