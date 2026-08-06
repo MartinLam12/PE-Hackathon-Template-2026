@@ -57,11 +57,14 @@ view when the backend raises, so every read path falls through to Postgres.
 | `nginx.conf` | Load balancing, upstream health, failover |
 | `chaos/chaos_test.sh` | Fault injection and recovery evidence |
 | `loadtest/locustfile.py` | Three load profiles (tier-comparable, realistic, saturation) |
-| `tests/conftest.py` | SQLite test DB + SimpleCache (no live Postgres or Redis needed) |
+| `app/observability.py` | Structured logging + Prometheus `/metrics` |
+| `scripts/health_watch.py` | Health poll + webhook alert (IR Silver starter) |
+| `monitoring/` | Prometheus scrape config + alert rules |
 
 ## Related docs
 
 - [performance.md](performance.md) — bottleneck analysis, cache A/B, where the ceiling is
 - [load-testing.md](load-testing.md) — load test setup and per-tier results
 - [failure-modes.md](failure-modes.md) — what breaks, status codes, chaos results
-- [coverage-gaps-for-person-1.md](coverage-gaps-for-person-1.md) — coverage state and remaining gaps
+- [observability.md](observability.md) — structured logs, metrics, alerting starter
+- [coverage-gaps-for-person-1.md](coverage-gaps-for-person-1.md) — coverage state

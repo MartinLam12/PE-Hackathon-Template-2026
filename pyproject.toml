@@ -11,6 +11,8 @@ dependencies = [
     "psycopg2-binary>=2.9",
     "python-dotenv>=1.0",
     "redis>=5.0",
+    "prometheus-flask-exporter>=0.23",
+    "prometheus-client>=0.21",
 ]
 
 [dependency-groups]
@@ -31,3 +33,4 @@ omit = ["app/models/__init__.py"]
 [tool.coverage.report]
 show_missing = true
 skip_empty = true
+fail_under = 98

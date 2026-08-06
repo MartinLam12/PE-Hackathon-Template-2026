@@ -7,9 +7,6 @@ from werkzeug.exceptions import ServiceUnavailable
 
 db = DatabaseProxy()
 
-# Endpoints that must answer even when Postgres is unreachable. /health is
-# probed by the load balancer, so making it depend on the database would pull
-# otherwise-healthy instances out of rotation during a database incident.
 NO_DB_ENDPOINTS = {"health"}
 
 
@@ -42,7 +39,7 @@ def init_db(app):
 
     @app.before_request
     def _db_connect():
-        if request.endpoint in NO_DB_ENDPOINTS:
+        if request.endpoint in NO_DB_ENDPOINTS or request.path == "/metrics":
             return
 
         try:
