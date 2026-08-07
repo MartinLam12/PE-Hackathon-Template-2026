@@ -57,11 +57,21 @@ view when the backend raises, so every read path falls through to Postgres.
 | `nginx.conf` | Load balancing, upstream health, failover |
 | `chaos/chaos_test.sh` | Fault injection and recovery evidence |
 | `loadtest/locustfile.py` | Three load profiles (tier-comparable, realistic, saturation) |
-| `tests/conftest.py` | SQLite test DB + SimpleCache (no live Postgres or Redis needed) |
+| `app/observability.py` | Structured logging + Prometheus `/metrics` |
+| `app/alerting.py` | Alertmanager → Discord/Slack message formatting |
+| `scripts/health_watch.py` | Health poll + webhook alert |
+| `scripts/alert_webhook_bridge.py` | Alertmanager receiver |
+| `scripts/demo_incident.sh` | Trigger + recover demo for judges |
+| `monitoring/` | Prometheus, Alertmanager, Grafana, alert rules |
+| `docs/incident-response.md` | IR tier checklist + diagnosis walkthrough |
+| `docs/runbooks.md` | Per-alert response playbooks |
 
 ## Related docs
 
 - [performance.md](performance.md) — bottleneck analysis, cache A/B, where the ceiling is
 - [load-testing.md](load-testing.md) — load test setup and per-tier results
 - [failure-modes.md](failure-modes.md) — what breaks, status codes, chaos results
-- [coverage-gaps-for-person-1.md](coverage-gaps-for-person-1.md) — coverage state and remaining gaps
+- [incident-response.md](incident-response.md) — IR Bronze/Silver/Gold checklist
+- [runbooks.md](runbooks.md) — alert response playbooks
+- [observability.md](observability.md) — logs, metrics, monitoring stack
+- [coverage-gaps-for-person-1.md](coverage-gaps-for-person-1.md) — coverage state

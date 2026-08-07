@@ -7,18 +7,18 @@ from werkzeug.exceptions import ServiceUnavailable
 
 db = DatabaseProxy()
 
-# Endpoints that must answer even when Postgres is unreachable. /health is
-# probed by the load balancer, so making it depend on the database would pull
-# otherwise-healthy instances out of rotation during a database incident.
 NO_DB_ENDPOINTS = {"health"}
 
 
 class BaseModel(Model):
+    """Shared Peewee base model bound to the app database proxy."""
+
     class Meta:
         database = db
 
 
 def init_db(app):
+    """Configure pooled Postgres connections and per-request checkout hooks."""
     # PooledPostgresqlDatabase keeps connections open and hands them back out
     # instead of doing a TCP connect + auth handshake on every request.
     # See docs/performance.md — per-request connection setup was a measurable
@@ -42,7 +42,7 @@ def init_db(app):
 
     @app.before_request
     def _db_connect():
-        if request.endpoint in NO_DB_ENDPOINTS:
+        if request.endpoint in NO_DB_ENDPOINTS or request.path == "/metrics":
             return
 
         try:

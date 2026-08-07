@@ -4,6 +4,8 @@ from app.database import BaseModel
 
 
 class ShortURL(BaseModel):
+    """Short link mapping from a code to an original URL."""
+
     id = AutoField()
     user_id = IntegerField(null=True)
     short_code = TextField(unique=True)

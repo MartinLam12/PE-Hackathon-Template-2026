@@ -235,7 +235,40 @@ Handlers live in `app/__init__.py` (`BadRequest`, `NotFound`, `ServiceUnavailabl
 
 A `503` can also mean the pooled database connection we were handed was dead (for example, Postgres restarted underneath us). The error handler evicts idle pooled connections when that happens, so the next request reconnects instead of drawing another dead handle.
 
-See [docs/failure-modes.md](docs/failure-modes.md) for what can break, what users see, and how each case was tested. See [docs/architecture.md](docs/architecture.md) for system diagrams, and [docs/performance.md](docs/performance.md) for the bottleneck analysis.
+See [docs/failure-modes.md](docs/failure-modes.md) for what can break, what users see, and how each case was tested. See [docs/architecture.md](docs/architecture.md) for system diagrams, [docs/performance.md](docs/performance.md) for the bottleneck analysis, and [docs/observability.md](docs/observability.md) for logging and metrics.
+
+## Observability (Incident Response — complete)
+
+Bronze through Gold implemented. Full guide: [docs/incident-response.md](docs/incident-response.md).
+
+```bash
+# Set ALERT_WEBHOOK_URL in .env, then:
+docker compose --profile monitoring up -d --build
+```
+
+| Tier | Evidence |
+|------|----------|
+| Bronze | Structured logs + `/metrics` + manual curl checks |
+| Silver | 5 alert rules + Alertmanager + webhook + health-watch (60 s) |
+| Gold | Grafana dashboard (6 panels) + [runbooks.md](docs/runbooks.md) |
+
+| URL | Service |
+|-----|---------|
+| http://localhost:8080/health | Liveness |
+| http://localhost:8080/metrics | Prometheus metrics |
+| http://localhost:9090 | Prometheus |
+| http://localhost:9093 | Alertmanager |
+| http://localhost:3000 | Grafana (admin/admin) |
+
+Test alerts: `./scripts/demo_incident.sh`
+
+## Reliability roadmap status
+
+| Tier | Requirement | Status |
+|------|-------------|--------|
+| **Bronze** | Automated tests + CI + `/health` | Done |
+| **Silver** | 50%+ coverage, integration tests, CI gate, error docs | Done (100% coverage) |
+| **Gold** | 70%+ coverage, graceful errors, chaos tests, failure-mode docs | Done |
 
 ## Scaling and load testing
 
@@ -309,7 +342,7 @@ The suite is split by scope:
 
 Both suites share `tests/conftest.py`, which swaps Postgres for a throwaway SQLite file so no live database is needed.
 
-Current coverage: **96%** (roadmap targets are 50% for Silver, 70% for Gold). Remaining uncovered lines are catalogued in [docs/coverage-gaps-for-person-1.md](docs/coverage-gaps-for-person-1.md).
+Current coverage: **100%** (44 tests). See [docs/coverage-gaps-for-person-1.md](docs/coverage-gaps-for-person-1.md).
 
 ## CI
 
