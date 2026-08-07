@@ -63,6 +63,21 @@ def test_chat_webhook_payload_uses_text_for_slack():
     assert payload == {"text": "hello"}
 
 
+def test_chat_webhook_payload_uses_text_for_uppercase_slack_host():
+    payload = chat_webhook_payload("https://HOOKS.SLACK.COM/services/T/B/X", "hello")
+
+    assert payload == {"text": "hello"}
+
+
+def test_chat_webhook_payload_ignores_slack_host_embedded_in_discord_url():
+    payload = chat_webhook_payload(
+        "https://discord.com/api/webhooks/abc?note=hooks.slack.com",
+        "hello",
+    )
+
+    assert payload == {"content": "hello"}
+
+
 @patch("app.alerting.urllib.request.urlopen")
 def test_send_chat_webhook_posts_discord_json(mock_urlopen: MagicMock):
     mock_urlopen.return_value.__enter__.return_value = MagicMock()

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse
 
 
 def format_alertmanager_payload(payload: dict) -> str:
@@ -25,10 +26,16 @@ def format_alertmanager_payload(payload: dict) -> str:
     return "\n".join(lines)
 
 
+def _is_slack_webhook(webhook_url: str) -> bool:
+    """Return True when the URL targets Slack's incoming webhook host."""
+    hostname = urlparse(webhook_url).hostname
+    return hostname is not None and hostname.lower() == "hooks.slack.com"
+
+
 def chat_webhook_payload(webhook_url: str, message: str) -> dict[str, str]:
     """Build the JSON body for Discord or Slack incoming webhooks."""
     truncated = message[:1900]
-    if "hooks.slack.com" in webhook_url:
+    if _is_slack_webhook(webhook_url):
         return {"text": truncated}
     return {"content": truncated}
 
