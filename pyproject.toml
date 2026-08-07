@@ -33,4 +33,4 @@ omit = ["app/models/__init__.py"]
 [tool.coverage.report]
 show_missing = true
 skip_empty = true
-fail_under = 98
+fail_under = 100

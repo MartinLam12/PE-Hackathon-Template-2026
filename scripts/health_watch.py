@@ -12,14 +12,16 @@ Exit codes: 0 = healthy, 1 = unhealthy (and alert sent if configured).
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 
+from app.alerting import send_chat_webhook
+
 
 def check_health(url: str, timeout: float) -> tuple[bool, str]:
+    """Return whether the health URL responds with HTTP 200."""
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
             body = response.read().decode("utf-8", errors="replace")
@@ -30,19 +32,8 @@ def check_health(url: str, timeout: float) -> tuple[bool, str]:
         return False, str(exc.reason)
 
 
-def send_alert(webhook_url: str, message: str) -> None:
-    payload = json.dumps({"content": message}).encode("utf-8")
-    request = urllib.request.Request(
-        webhook_url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=10):
-        pass
-
-
 def main() -> int:
+    """Poll health once and optionally notify a chat webhook on failure."""
     parser = argparse.ArgumentParser(description="Health check watcher with optional webhook alert")
     parser.add_argument("--url", default="http://127.0.0.1:8080/health", help="Health check URL")
     parser.add_argument("--timeout", type=float, default=5.0, help="Request timeout in seconds")
@@ -68,7 +59,7 @@ def main() -> int:
 
     if webhook:
         try:
-            send_alert(webhook, message)
+            send_chat_webhook(webhook, message)
             print("Alert sent.", file=sys.stderr)
         except urllib.error.URLError as exc:
             print(f"Failed to send alert: {exc.reason}", file=sys.stderr)

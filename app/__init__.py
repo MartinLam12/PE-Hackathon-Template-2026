@@ -13,6 +13,7 @@ from app.routes import register_routes
 
 
 def create_app():
+    """Create and configure the Flask application."""
     load_dotenv()
 
     app = Flask(__name__)
@@ -25,16 +26,17 @@ def create_app():
     if os.environ.get("TRUST_PROXY_HEADERS", "").lower() in {"1", "true", "yes"}:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
+    init_observability(app)
     init_db(app)
     init_cache(app)
 
     from app import models  # noqa: F401 - registers models with Peewee
 
     register_routes(app)
-    init_observability(app)
 
     @app.route("/health")
     def health():
+        """Liveness probe that never touches the database."""
         return jsonify(status="ok")
 
     @app.errorhandler(BadRequest)

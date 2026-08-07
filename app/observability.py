@@ -20,6 +20,11 @@ APP_ERRORS = Counter(
 )
 
 
+def _sanitize_log_value(value: str) -> str:
+    """Strip control characters that could forge log records."""
+    return value.replace("\r", "").replace("\n", "")
+
+
 def configure_logging(app):
     """Structured logs: timestamp, level, logger name, message."""
     log_level = logging.DEBUG if app.debug else logging.INFO
@@ -68,7 +73,7 @@ def init_observability(app):
         app.logger.info(
             "request method=%s path=%s endpoint=%s status=%s duration_ms=%.2f",
             request.method,
-            request.path,
+            _sanitize_log_value(request.path),
             endpoint,
             status,
             duration_ms,

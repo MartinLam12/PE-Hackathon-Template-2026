@@ -56,7 +56,7 @@ groups:
       - alert: HighAppMemory
         expr: |
           sum by (container_label_com_docker_compose_service) (
-            container_memory_usage_bytes{
+            container_memory_rss{
               container_label_com_docker_compose_service=~"app1|app2",
               image!=""
             }
@@ -66,4 +66,4 @@ groups:
           severity: warning
         annotations:
           summary: "App container memory is high"
-          description: "An app container is using more than ~400 MB RSS for 2 minutes."
+          description: "An app container RSS exceeds ~400 MB for 2 minutes."

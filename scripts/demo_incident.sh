@@ -11,8 +11,8 @@ echo
 echo "== 2. Stop app tier (expect alerts within ~1 min) =="
 docker compose stop app1 app2
 
-echo "Waiting 75s for Prometheus + health-watch alerts..."
-sleep 75
+echo "Waiting 120s for Prometheus scrape, ShortenerDown (1m), and Alertmanager group_wait..."
+sleep 120
 
 echo "== 3. Check health (expect failure) =="
 curl -sf "$BASE/health" && echo "unexpected success" || echo "health check failed as expected"

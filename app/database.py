@@ -11,11 +11,14 @@ NO_DB_ENDPOINTS = {"health"}
 
 
 class BaseModel(Model):
+    """Shared Peewee base model bound to the app database proxy."""
+
     class Meta:
         database = db
 
 
 def init_db(app):
+    """Configure pooled Postgres connections and per-request checkout hooks."""
     # PooledPostgresqlDatabase keeps connections open and hands them back out
     # instead of doing a TCP connect + auth handshake on every request.
     # See docs/performance.md — per-request connection setup was a measurable

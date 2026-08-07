@@ -22,6 +22,7 @@ DETAIL_TTL = 60
 
 
 def _url_data(url):
+    """Serialize a ShortURL row for JSON responses."""
     return {
         "id": url.id,
         "user_id": url.user_id,
@@ -35,6 +36,7 @@ def _url_data(url):
 
 
 def _new_code():
+    """Generate a random six-character short code."""
     return "".join(secrets.choice(ALPHABET) for _ in range(6))
 
 
@@ -75,6 +77,7 @@ def list_urls():
 
 @urls_bp.post("/urls")
 def create_url():
+    """Create a new short URL from JSON input."""
     data = request.get_json(silent=True)
     if not data or not data.get("original_url"):
         abort(400, description="original_url is required")
@@ -101,6 +104,7 @@ def create_url():
 @urls_bp.get("/urls/<short_code>")
 @cache.cached(timeout=DETAIL_TTL)
 def get_url(short_code):
+    """Return JSON metadata for a short code."""
     url = ShortURL.get_or_none(ShortURL.short_code == short_code)
     if url is None:
         # abort() raises, so nothing is cached and a code created later is

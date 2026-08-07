@@ -6,10 +6,9 @@ from __future__ import annotations
 import json
 import os
 import sys
-import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
-from app.alerting import format_alertmanager_payload, send_chat_webhook
+from app.alerting import deliver_alert_webhook
 
 
 class AlertHandler(BaseHTTPRequestHandler):
@@ -31,20 +30,18 @@ class AlertHandler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        message = format_alertmanager_payload(payload)
         webhook = os.environ.get("ALERT_WEBHOOK_URL")
-        if webhook:
-            try:
-                send_chat_webhook(webhook, message)
-            except urllib.error.URLError as exc:
-                sys.stderr.write(f"webhook delivery failed: {exc.reason}\n")
+        status, response_body = deliver_alert_webhook(webhook, payload)
+        if status >= 400:
+            sys.stderr.write("webhook delivery failed\n")
 
-        self.send_response(200)
+        self.send_response(status)
         self.end_headers()
-        self.wfile.write(b"ok")
+        self.wfile.write(response_body)
 
 
 def main() -> None:
+    """Start the Alertmanager webhook bridge HTTP server."""
     host = os.environ.get("WEBHOOK_BRIDGE_HOST", "0.0.0.0")
     port = int(os.environ.get("WEBHOOK_BRIDGE_PORT", "5002"))
     server = HTTPServer((host, port), AlertHandler)

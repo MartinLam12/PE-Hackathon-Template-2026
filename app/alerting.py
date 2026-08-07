@@ -25,8 +25,17 @@ def format_alertmanager_payload(payload: dict) -> str:
     return "\n".join(lines)
 
 
+def chat_webhook_payload(webhook_url: str, message: str) -> dict[str, str]:
+    """Build the JSON body for Discord or Slack incoming webhooks."""
+    truncated = message[:1900]
+    if "hooks.slack.com" in webhook_url:
+        return {"text": truncated}
+    return {"content": truncated}
+
+
 def send_chat_webhook(webhook_url: str, message: str) -> None:
-    payload = json.dumps({"content": message[:1900]}).encode("utf-8")
+    """POST a formatted alert to a Discord or Slack incoming webhook URL."""
+    payload = json.dumps(chat_webhook_payload(webhook_url, message)).encode("utf-8")
     request = urllib.request.Request(
         webhook_url,
         data=payload,
@@ -35,3 +44,17 @@ def send_chat_webhook(webhook_url: str, message: str) -> None:
     )
     with urllib.request.urlopen(request, timeout=10):
         pass
+
+
+def deliver_alert_webhook(webhook_url: str | None, payload: dict) -> tuple[int, bytes]:
+    """Forward an Alertmanager payload to chat; return HTTP status and body."""
+    message = format_alertmanager_payload(payload)
+    if not webhook_url:
+        return 200, b"ok"
+
+    try:
+        send_chat_webhook(webhook_url, message)
+    except urllib.error.URLError:
+        return 502, b"webhook delivery failed\n"
+
+    return 200, b"ok\n"

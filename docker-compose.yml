@@ -82,7 +82,7 @@ services:
     image: prom/prometheus:v2.55.1
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.enable-lifecycle
@@ -98,7 +98,7 @@ services:
     image: prom/alertmanager:v0.27.0
     restart: unless-stopped
     ports:
-      - "9093:9093"
+      - "127.0.0.1:9093:9093"
     volumes:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     depends_on:
@@ -119,7 +119,7 @@ services:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
     restart: unless-stopped
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -131,10 +131,10 @@ services:
     image: grafana/grafana:11.3.0
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_DEFAULT_THEME: dark
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro

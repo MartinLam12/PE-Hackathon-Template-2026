@@ -4,6 +4,8 @@ from app.database import BaseModel
 
 
 class User(BaseModel):
+    """Registered user who can own short URLs."""
+
     id = AutoField()
     username = TextField()
     email = TextField()

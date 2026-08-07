@@ -27,7 +27,7 @@ Step-by-step guides for alerts defined in [`monitoring/alert_rules.yml`](../moni
 ### Remediate
 
 1. Restart failed containers: `docker compose restart app1 app2 nginx`
-2. If Postgres is down, see [Database unavailable](#database-unavailable) in [failure-modes.md](failure-modes.md).
+2. If Postgres is down, see [Database unavailable](failure-modes.md#database-unavailable).
 3. Confirm recovery: scrape health returns `1`, `/health` returns 200.
 
 ---

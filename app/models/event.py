@@ -4,6 +4,8 @@ from app.database import BaseModel
 
 
 class Event(BaseModel):
+    """Analytics event tied to a URL or user."""
+
     id = AutoField()
     url_id = IntegerField(null=True)
     user_id = IntegerField(null=True)

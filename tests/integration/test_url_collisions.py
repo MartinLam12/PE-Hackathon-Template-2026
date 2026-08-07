@@ -33,10 +33,17 @@ def test_create_url_collision_exhaustion_returns_503(client, monkeypatch):
         updated_at=now,
     )
 
-    monkeypatch.setattr("app.routes.urls._new_code", lambda: "dupfix")
+    attempts = {"count": 0}
+
+    def always_duplicate():
+        attempts["count"] += 1
+        return "dupfix"
+
+    monkeypatch.setattr("app.routes.urls._new_code", always_duplicate)
 
     response = client.post("/urls", json={"original_url": "https://example.com/new"})
     assert response.status_code == 503
+    assert attempts["count"] == 5
     data = response.get_json()
     assert data["error"] == "service_unavailable"
     assert "unique" in data["message"].lower()
