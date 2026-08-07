@@ -237,21 +237,30 @@ A `503` can also mean the pooled database connection we were handed was dead (fo
 
 See [docs/failure-modes.md](docs/failure-modes.md) for what can break, what users see, and how each case was tested. See [docs/architecture.md](docs/architecture.md) for system diagrams, [docs/performance.md](docs/performance.md) for the bottleneck analysis, and [docs/observability.md](docs/observability.md) for logging and metrics.
 
-## Observability (Incident Response)
+## Observability (Incident Response — complete)
 
-Structured request logs and a Prometheus `/metrics` endpoint are configured in `app/observability.py`.
+Bronze through Gold implemented. Full guide: [docs/incident-response.md](docs/incident-response.md).
 
 ```bash
-curl -s http://localhost:8080/health    # liveness
-curl -s http://localhost:8080/metrics   # request counts, latency, errors
-docker compose logs -f app1             # structured logs
+# Set ALERT_WEBHOOK_URL in .env, then:
+docker compose --profile monitoring up -d --build
 ```
 
-Optional Prometheus stack: `docker compose --profile monitoring up -d` → http://localhost:9090
+| Tier | Evidence |
+|------|----------|
+| Bronze | Structured logs + `/metrics` + manual curl checks |
+| Silver | 5 alert rules + Alertmanager + webhook + health-watch (60 s) |
+| Gold | Grafana dashboard (6 panels) + [runbooks.md](docs/runbooks.md) |
 
-Health watch + webhook alert (Silver starter): `uv run python scripts/health_watch.py --url http://localhost:8080/health`
+| URL | Service |
+|-----|---------|
+| http://localhost:8080/health | Liveness |
+| http://localhost:8080/metrics | Prometheus metrics |
+| http://localhost:9090 | Prometheus |
+| http://localhost:9093 | Alertmanager |
+| http://localhost:3000 | Grafana (admin/admin) |
 
-Full guide: [docs/observability.md](docs/observability.md).
+Test alerts: `./scripts/demo_incident.sh`
 
 ## Reliability roadmap status
 

@@ -8,18 +8,62 @@ groups:
           severity: critical
         annotations:
           summary: "URL shortener is unreachable"
-          description: "Prometheus cannot scrape /metrics from the shortener for 1 minute."
+          description: "Prometheus cannot scrape /metrics through nginx for 1 minute."
 
       - alert: HighErrorRate
         expr: |
           (
             sum(rate(flask_http_request_total{status=~"5.."}[2m]))
             /
-            sum(rate(flask_http_request_total[2m]))
+            clamp_min(sum(rate(flask_http_request_total[2m])), 0.001)
           ) > 0.05
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "High 5xx error rate"
-          description: "More than 5% of requests are failing with 5xx over the last 2 minutes."
+          description: "More than 5% of requests returned 5xx over the last 2 minutes."
+
+      - alert: HighClientErrorRate
+        expr: |
+          (
+            sum(rate(flask_http_request_total{status=~"4.."}[2m]))
+            /
+            clamp_min(sum(rate(flask_http_request_total[2m])), 0.001)
+          ) > 0.20
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 4xx error rate"
+          description: "More than 20% of requests returned 4xx — possible bad clients or validation issues."
+
+      - alert: HighAppCPU
+        expr: |
+          sum by (container_label_com_docker_compose_service) (
+            rate(container_cpu_usage_seconds_total{
+              container_label_com_docker_compose_service=~"app1|app2",
+              image!=""
+            }[2m])
+          ) > 0.75
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "App container CPU is high"
+          description: "An app container is using more than 75% of one CPU core sustained for 2 minutes."
+
+      - alert: HighAppMemory
+        expr: |
+          sum by (container_label_com_docker_compose_service) (
+            container_memory_usage_bytes{
+              container_label_com_docker_compose_service=~"app1|app2",
+              image!=""
+            }
+          ) > 400000000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "App container memory is high"
+          description: "An app container is using more than ~400 MB RSS for 2 minutes."

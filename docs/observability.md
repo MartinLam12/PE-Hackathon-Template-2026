@@ -1,88 +1,85 @@
-# Observability (Incident Response)
+# Observability & Incident Response
 
-Bronze visibility: structured logs, Prometheus metrics, and manual status checks.
+Full implementation guide: [incident-response.md](incident-response.md)  
+Alert playbooks: [runbooks.md](runbooks.md)
 
-## Quick status checks
+## Bronze — manual status checks
 
 ```bash
-# Liveness (no database required)
+# Liveness (no database)
 curl -s http://localhost:8080/health
-# → {"status":"ok"}
 
-# Prometheus metrics (request counts, latency, errors)
-curl -s http://localhost:8080/metrics | head
+# Prometheus metrics
+curl -s http://localhost:8080/metrics | head -20
 
-# Container health (Docker Compose)
+# Container state
 docker compose ps
 docker compose logs -f app1
 ```
 
 ## Structured logging
 
-Configured in [`app/observability.py`](../app/observability.py). Every request logs:
+Every request logs (from `app/observability.py`):
 
 ```text
 2026-07-25T03:00:00+0000 INFO app request method=GET path=/health endpoint=health status=200 duration_ms=0.42
 ```
 
-Fields: timestamp, level, logger name, HTTP method, path, Flask endpoint, status code, duration.
+## Metrics (4+ golden signals)
 
-View logs:
+| Metric | Source |
+|--------|--------|
+| Request rate | `flask_http_request_total` |
+| Error rate | 4xx/5xx ratio from `flask_http_request_total` |
+| Latency p95 | `flask_http_request_duration_seconds_bucket` |
+| CPU / memory | cAdvisor `container_*` metrics |
+| Custom counters | `shortener_app_requests_total`, `shortener_app_errors_total` |
 
-```bash
-# Local dev
-uv run run.py
-
-# Docker stack
-docker compose logs -f app1 app2 nginx
-```
-
-## Metrics collected
-
-| Metric | Source | Purpose |
-|--------|--------|---------|
-| `flask_http_request_*` | prometheus-flask-exporter | Request count, latency, in-progress |
-| `shortener_app_requests_total` | custom counter | Per-endpoint status breakdown |
-| `shortener_app_errors_total` | custom counter | 4xx/5xx totals |
-
-`/metrics` skips the database connection so scrapes succeed during a Postgres outage.
-
-## Prometheus (Silver starter)
-
-With the full stack running:
+## Silver — alerting stack
 
 ```bash
-docker compose --profile monitoring up -d
-open http://localhost:9090
+# Set Discord/Slack webhook in .env
+ALERT_WEBHOOK_URL=https://discord.com/api/webhooks/...
+
+docker compose --profile monitoring up -d --build
 ```
 
-Prometheus scrapes `nginx:80/metrics` every 15s. Alert rules live in [`monitoring/alert_rules.yml`](../monitoring/alert_rules.yml).
+| Service | Port | Role |
+|---------|------|------|
+| Prometheus | 9090 | Scrapes `/metrics` + cAdvisor; evaluates alert rules |
+| Alertmanager | 9093 | Routes firing alerts to webhook bridge |
+| webhook-bridge | 5002 | Formats alerts for Discord/Slack |
+| health-watch | — | Polls `/health` every 60 s (backup alert path) |
+| cAdvisor | 8081 | Container CPU/memory metrics |
 
-## Health watch + webhook alert
+**Alert rules:** `monitoring/alert_rules.yml` — service down, 5xx rate, 4xx rate, high CPU, high memory.
 
-Simple alert script (no Prometheus required):
+**Test alerts:**
 
 ```bash
-export ALERT_WEBHOOK_URL="https://discord.com/api/webhooks/..."
-uv run python scripts/health_watch.py --url http://localhost:8080/health
+chmod +x scripts/demo_incident.sh
+./scripts/demo_incident.sh
 ```
 
-Returns exit code 1 and posts to the webhook when `/health` fails. Run from cron or a CI scheduled job to meet the “alert within 5 minutes” Silver bar.
+## Gold — Grafana dashboard
+
+- URL: http://localhost:3000 (admin / admin)
+- Dashboard: **URL Shortener — Incident Response**
+- Provisioned from `monitoring/grafana/dashboards/shortener-incident.json`
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Client[Client] --> Nginx[Nginx :8080]
-    Nginx --> App[Flask app]
-    App --> Logs[Structured logs]
+    Nginx --> App[Flask apps]
+    App --> Logs[Logs]
     App --> Metrics["/metrics"]
-    Prometheus[Prometheus :9090] --> Metrics
-    Watch[health_watch.py] --> Health["/health"]
-    Watch --> Webhook[Discord / Slack]
+    Prometheus --> Metrics
+    Prometheus --> cAdvisor[cAdvisor]
+    Prometheus --> Alertmanager
+    Alertmanager --> Bridge[webhook-bridge]
+    Bridge --> Chat[Discord/Slack]
+    Prometheus --> Grafana[Grafana]
+    Watch[health-watch] --> Health["/health"]
+    Watch --> Chat
 ```
-
-## Related docs
-
-- [failure-modes.md](failure-modes.md) — Reliability Gold failure catalogue
-- [architecture.md](architecture.md) — system components

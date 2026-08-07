@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Poll /health and send a webhook alert when the service is unhealthy.
 
-Incident Response — Silver starter. Set ALERT_WEBHOOK_URL to a Discord or
+Incident Response — Silver backup path. Set ALERT_WEBHOOK_URL to a Discord or
 Slack incoming webhook URL, then run:
 
     uv run python scripts/health_watch.py --url http://localhost:8080/health
